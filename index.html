@@ -1,0 +1,415 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>বিদ্যালয় ব্যবস্থাপনা অ্যাপ</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:14px;font-family:Arial,sans-serif;background:#eef5ff;color:#183153}
+header{background:#1266a8;color:white;text-align:center;padding:20px 12px;border-radius:15px}
+nav,.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+section{background:white;padding:14px;margin-top:14px;border-radius:12px}
+input,select,button{width:100%;padding:11px;margin:5px 0;border:1px solid #ccd6e0;border-radius:8px;font-size:15px}
+button{background:#1266a8;color:white;border:0}
+nav button{background:white;color:#1266a8;border:1px solid #ccd6e0}
+.student{padding:12px;margin:10px 0;border:1px solid #dce5ef;border-radius:9px}
+.info{background:#e5f6eb;padding:12px;border-radius:8px;line-height:1.9}
+.edit{background:#16804a}.del{background:#b42318}
+.hidden{display:none}
+.small{font-size:13px;color:#52657a}
+</style>
+</head>
+<body>
+
+<header>
+<h2>🏫 বিদ্যালয় ব্যবস্থাপনা</h2>
+<p>উত্তর সিংগেরগাড়ী নেকাবাঁশ সরকারি প্রাথমিক বিদ্যালয়</p>
+</header>
+
+<nav>
+<button onclick="showPage('students')">👧 শিক্ষার্থী তালিকা</button>
+<button onclick="showPage('attendance')">📋 দৈনিক উপস্থিতি</button>
+</nav>
+
+<section id="students">
+<h3>শিক্ষার্থীদের তথ্য</h3>
+
+<label>শ্রেণি</label>
+<select id="studentClass">
+<option>প্রথম</option><option>দ্বিতীয়</option>
+<option>তৃতীয়</option><option>চতুর্থ</option><option>পঞ্চম</option>
+</select>
+
+<label>শিক্ষার্থী আইডি</label>
+<input id="sid" placeholder="যেমন S001">
+
+<label>শিক্ষার্থীর নাম</label>
+<input id="sname" placeholder="সম্পূর্ণ নাম">
+
+<label>রোল নম্বর</label>
+<input id="roll" type="number" min="1" placeholder="রোল">
+
+<button id="addStudent">➕ শিক্ষার্থী যোগ করুন</button>
+<p id="studentMessage" role="status"></p>
+
+<label>তালিকা ফিল্টার</label>
+<select id="filterClass">
+<option value="সব">সব শ্রেণি</option>
+<option>প্রথম</option><option>দ্বিতীয়</option>
+<option>তৃতীয়</option><option>চতুর্থ</option><option>পঞ্চম</option>
+</select>
+<input id="search" placeholder="নাম, আইডি বা রোল খুঁজুন">
+
+<div class="info">মোট শিক্ষার্থী: <b id="studentCount">0</b></div>
+<div id="studentList"></div>
+</section>
+
+<section id="attendance" class="hidden">
+<h3>📋 দৈনিক উপস্থিতি</h3>
+
+<label>শ্রেণি</label>
+<select id="attendanceClass">
+<option>প্রথম</option><option>দ্বিতীয়</option>
+<option>তৃতীয়</option><option>চতুর্থ</option><option>পঞ্চম</option>
+</select>
+
+<label>তারিখ</label>
+<input type="date" id="attendanceDate">
+
+<div id="attendanceList"></div>
+
+<div class="info">
+মোট: <b id="total">0</b><br>
+উপস্থিত: <b id="present">0</b><br>
+অনুপস্থিত: <b id="absent">0</b><br>
+ছুটিতে: <b id="leave">0</b><br>
+চিহ্নিত হয়নি: <b id="pending">0</b>
+</div>
+
+<button id="saveAttendance">💾 উপস্থিতি সংরক্ষণ</button>
+<p id="attendanceMessage" role="status"></p>
+</section>
+
+<p class="small">তথ্য এই ব্রাউজারের স্থানীয় স্টোরেজে থাকবে। অন্য মোবাইলে স্বয়ংক্রিয়ভাবে যাবে না।</p>
+
+<script>
+const $ = id => document.getElementById(id);
+const STUDENT_KEY = "schoolStudentsV3";
+const ATT_KEY = "schoolAttendanceV3";
+let students = [];
+let attendance = {};
+
+try {
+ students = JSON.parse(localStorage.getItem(STUDENT_KEY) || "[]");
+ if(!Array.isArray(students)) students = [];
+} catch(e) { students = []; }
+
+try {
+ attendance = JSON.parse(localStorage.getItem(ATT_KEY) || "{}");
+ if(!attendance || typeof attendance !== "object" || Array.isArray(attendance)) attendance = {};
+} catch(e) { attendance = {}; }
+
+function saveStudents(){
+ try {
+  localStorage.setItem(STUDENT_KEY, JSON.stringify(students));
+  return true;
+ } catch(e) {
+  $("studentMessage").textContent = "সংরক্ষণ হয়নি।";
+  return false;
+ }
+}
+
+function saveAttData(){
+ try {
+  localStorage.setItem(ATT_KEY, JSON.stringify(attendance));
+  return true;
+ } catch(e) {
+  $("attendanceMessage").textContent = "উপস্থিতি সংরক্ষণ হয়নি।";
+  return false;
+ }
+}
+
+function showPage(page){
+ $("students").classList.toggle("hidden", page !== "students");
+ $("attendance").classList.toggle("hidden", page !== "attendance");
+ if(page === "students") renderStudents();
+ else renderAttendance();
+}
+
+function renderStudents(){
+ const q = $("search").value.trim().toLowerCase();
+ const filter = $("filterClass").value;
+ const list = $("studentList");
+ list.replaceChildren();
+ const confirmation = document.getElementById("deleteConfirmBox");
+ if(confirmation) confirmation.remove();
+
+ const arr = students.filter(s => {
+  const name = String(s.name || "").toLowerCase();
+  const id = String(s.id || "").toLowerCase();
+  const roll = String(s.roll ?? "").toLowerCase();
+  const className = String(s.className || "");
+  return (filter === "সব" || className === filter) &&
+         (name.includes(q) || id.includes(q) || roll.includes(q));
+ });
+
+ $("studentCount").textContent = arr.length;
+
+ arr.sort((a,b) => a.roll - b.roll).forEach(s => {
+  const card = document.createElement("div");
+  card.className = "student";
+
+  const title = document.createElement("b");
+  title.textContent = s.name;
+  card.appendChild(title);
+
+  const info = document.createElement("p");
+  info.textContent = "শ্রেণি: " + s.className +
+   " | রোল: " + s.roll + " | আইডি: " + s.id;
+  card.appendChild(info);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const edit = document.createElement("button");
+  edit.className = "edit";
+  edit.textContent = "✏️ সম্পাদনা";
+  edit.onclick = () => editStudent(s.id);
+  actions.appendChild(edit);
+
+  const del = document.createElement("button");
+  del.className = "del";
+  del.textContent = "🗑️ মুছুন";
+  del.onclick = () => deleteStudent(s.id);
+  actions.appendChild(del);
+
+  card.appendChild(actions);
+  list.appendChild(card);
+ });
+
+ if(arr.length === 0) list.textContent = "কোনো শিক্ষার্থী পাওয়া যায়নি।";
+}
+
+$("addStudent").onclick = () => {
+ const id = $("sid").value.trim();
+ const name = $("sname").value.trim();
+ const roll = Number($("roll").value);
+ const cls = $("studentClass").value;
+
+ if(!id || !name || !Number.isInteger(roll) || roll < 1){
+  $("studentMessage").textContent = "আইডি, নাম ও সঠিক রোল দিন।";
+  return;
+ }
+
+ if(students.some(s => s.id === id)){
+  $("studentMessage").textContent = "এই আইডি আগে ব্যবহার করা হয়েছে।";
+  return;
+ }
+
+ if(students.some(s => s.className === cls && s.roll === roll)){
+  $("studentMessage").textContent = "এই শ্রেণিতে রোলটি আগে ব্যবহার হয়েছে।";
+  return;
+ }
+
+ students.push({id, name, roll, className:cls});
+
+ if(saveStudents()){
+  $("sid").value = "";
+  $("sname").value = "";
+  $("roll").value = "";
+  $("studentMessage").textContent = "শিক্ষার্থী যোগ হয়েছে।";
+  renderStudents();
+  renderAttendance();
+ }
+};
+
+function editStudent(id){
+ const s = students.find(x => x.id === id);
+ if(!s) return;
+
+ const name = prompt("শিক্ষার্থীর নাম:", s.name);
+ if(name === null) return;
+ const rollText = prompt("রোল নম্বর:", String(s.roll));
+ if(rollText === null) return;
+ const newId = prompt("শিক্ষার্থী আইডি:", s.id);
+ if(newId === null) return;
+
+ const cls = prompt("শ্রেণি লিখুন: প্রথম, দ্বিতীয়, তৃতীয়, চতুর্থ বা পঞ্চম", s.className);
+ if(cls === null) return;
+
+ const validClasses = ["প্রথম","দ্বিতীয়","তৃতীয়","চতুর্থ","পঞ্চম"];
+ const roll = Number(rollText);
+ const cleanName = name.trim();
+ const cleanId = newId.trim();
+ const cleanClass = cls.trim();
+
+ if(!cleanName || !cleanId || !Number.isInteger(roll) || roll < 1 ||
+    !validClasses.includes(cleanClass)){
+  alert("তথ্য সঠিক নয়। আবার চেষ্টা করুন।");
+  return;
+ }
+
+ if(students.some(x => x !== s && x.id === cleanId)){
+  alert("এই আইডি অন্য শিক্ষার্থীর আছে।");
+  return;
+ }
+
+ if(students.some(x => x !== s && x.className === cleanClass && x.roll === roll)){
+  alert("এই শ্রেণিতে রোলটি আগে ব্যবহার হয়েছে।");
+  return;
+ }
+
+ s.name = cleanName;
+ s.id = cleanId;
+ s.roll = roll;
+ s.className = cleanClass;
+
+ if(saveStudents()){
+  $("studentMessage").textContent = "তথ্য পরিবর্তন হয়েছে।";
+  renderStudents();
+  renderAttendance();
+ }
+}
+
+function deleteStudent(id){
+ const s = students.find(x => String(x.id) === String(id));
+ if(!s) return;
+
+ // Acode Preview-তে confirm dialog না খুললেও কাজ করার জন্য পাতার ভেতরে নিশ্চিতকরণ।
+ const old = document.getElementById("deleteConfirmBox");
+ if(old) old.remove();
+ const box = document.createElement("div");
+ box.id = "deleteConfirmBox";
+ box.className = "info";
+ box.style.margin = "10px 0";
+ const message = document.createElement("p");
+ message.textContent = 'আপনি কি “' + s.name + '” শিক্ষার্থীর তথ্য মুছতে চান?';
+ box.appendChild(message);
+
+ const yes = document.createElement("button");
+ yes.textContent = "হ্যাঁ, মুছে ফেলুন";
+ yes.className = "del";
+ yes.onclick = () => {
+  const previousStudents = students.slice();
+  students = students.filter(x => String(x.id) !== String(id));
+  if(saveStudents()){
+   box.remove();
+   $("studentMessage").textContent = "শিক্ষার্থীর তথ্য মুছে গেছে।";
+   renderStudents();
+   renderAttendance();
+  } else {
+   students = previousStudents;
+   $("studentMessage").textContent = "তথ্য মুছে সংরক্ষণ করা যায়নি। ব্রাউজারের স্টোরেজ পরীক্ষা করুন।";
+  }
+ };
+ box.appendChild(yes);
+ const no = document.createElement("button");
+ no.textContent = "না, বাতিল";
+ no.onclick = () => box.remove();
+ box.appendChild(no);
+ $("studentList").prepend(box);
+ box.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+$("filterClass").addEventListener("change", renderStudents);
+$("search").addEventListener("input", renderStudents);
+
+function today(){
+ const d = new Date();
+ return d.getFullYear() + "-" +
+  String(d.getMonth()+1).padStart(2,"0") + "-" +
+  String(d.getDate()).padStart(2,"0");
+}
+$("attendanceDate").value = today();
+
+function attKey(){
+ return $("attendanceClass").value + "|" + $("attendanceDate").value;
+}
+
+function renderAttendance(){
+ const list = $("attendanceList");
+ list.replaceChildren();
+
+ if(!$("attendanceDate").value){
+  $("attendanceMessage").textContent = "তারিখ নির্বাচন করুন।";
+  updateCounts([]);
+  return;
+ }
+
+ const cls = $("attendanceClass").value;
+ const date = $("attendanceDate").value;
+ const arr = students.filter(s => s.className === cls);
+
+ arr.forEach(s => {
+  const row = document.createElement("div");
+  row.className = "student";
+
+  const label = document.createElement("b");
+  label.textContent = s.roll + ". " + s.name;
+  row.appendChild(label);
+
+  const select = document.createElement("select");
+  ["চিহ্নিত হয়নি","উপস্থিত","অনুপস্থিত","ছুটিতে"].forEach(v => {
+   const opt = document.createElement("option");
+   opt.value = v;
+   opt.textContent = v;
+   select.appendChild(opt);
+  });
+
+  const saved = attendance[attKey()] || {};
+  select.value = saved[s.id] || "চিহ্নিত হয়নি";
+
+  select.onchange = () => {
+   if(!attendance[attKey()]) attendance[attKey()] = {};
+   attendance[attKey()][s.id] = select.value;
+   saveAttData();
+   updateCounts(arr);
+  };
+
+  row.appendChild(select);
+  list.appendChild(row);
+ });
+
+ updateCounts(arr);
+ $("attendanceMessage").textContent = "";
+}
+
+function updateCounts(arr){
+ const saved = attendance[attKey()] || {};
+ $("total").textContent = arr.length;
+ $("present").textContent = arr.filter(s => saved[s.id] === "উপস্থিত").length;
+ $("absent").textContent = arr.filter(s => saved[s.id] === "অনুপস্থিত").length;
+ $("leave").textContent = arr.filter(s => saved[s.id] === "ছুটিতে").length;
+ $("pending").textContent = arr.filter(s =>
+  !saved[s.id] || saved[s.id] === "চিহ্নিত হয়নি"
+ ).length;
+}
+
+$("saveAttendance").onclick = () => {
+ const arr = students.filter(s => s.className === $("attendanceClass").value);
+ if(arr.length === 0){
+  $("attendanceMessage").textContent = "এই শ্রেণিতে আগে শিক্ষার্থী যোগ করুন।";
+  return;
+ }
+
+ const saved = attendance[attKey()] || {};
+ if(arr.some(s => !saved[s.id] || saved[s.id] === "চিহ্নিত হয়নি")){
+  $("attendanceMessage").textContent = "সব শিক্ষার্থীর উপস্থিতি চিহ্নিত করুন।";
+  return;
+ }
+
+ if(saveAttData()){
+  $("attendanceMessage").textContent = "উপস্থিতি সংরক্ষিত হয়েছে।";
+ }
+};
+
+$("attendanceClass").onchange = renderAttendance;
+$("attendanceDate").onchange = renderAttendance;
+
+renderStudents();
+renderAttendance();
+</script>
+</body>
+</html>
